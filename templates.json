@@ -1,0 +1,32 @@
+{
+  "Monkey_Puppet": {
+    "filename": "monkey_puppet.jpg",
+    "description": "A monkey puppet looking awkwardly away, used for situations where you are avoiding blame, hiding something, or acting innocent when you are guilty.",
+    "font_size": 40,
+    "wrap_width": 15,
+    "text_elements": {
+      "top_text": { "x": 300, "y": 50 },
+      "bottom_text": { "x": 300, "y": 450 }
+    }
+  },
+  "Drake rejecting": {
+    "filename": "drake_rejecting.jpg",
+    "description": "Drake rejecting something in the top panel and approving a usually controversial alternative in the bottom panel. A contrast meme.",
+    "font_size": 16,
+    "wrap_width": 12,
+    "text_elements": {
+      "top_text": { "x": 171, "y": 55 },
+      "bottom_text": { "x": 171, "y": 165 }
+    }
+  },
+  "Two_Buttons": {
+    "filename": "two_buttons.jpg",
+    "description": "A hero sweating while trying to push two difficult contradictory buttons. Used for situations where making a choice between two equally terrible or highly conflicting options is impossible.",
+    "font_size": 30
+  },
+  "Distracted_Boyfriend": {
+    "filename": "distracted_boyfriend.jpg",
+    "description": "A guy walking with his girlfriend but looking back at another girl. Used when you abandon a loyal responsibility in favor of a bad new habit or shiny object.",
+    "font_size": 30
+  }
+}
