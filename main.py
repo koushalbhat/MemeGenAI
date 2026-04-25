@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, Form, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -7,13 +7,15 @@ import json
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 from pydantic import BaseModel
-from modules.caption_generation import generate_meme_caption
+from modules.caption_generation import generate_meme_caption, generate_batched_captions, generate_custom_caption
 from modules.meme_assembly import assemble_meme
 from modules.moderation import moderate_input
 from modules.template_retrieval import get_best_template
 from modules.database import log_meme_history, upload_to_storage
-from fastapi import Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from modules.auth import get_current_user
+
+security = HTTPBearer()
 
 app = FastAPI(title="AI-Driven Meme Generation System")
 
@@ -48,10 +50,10 @@ def get_templates():
         return {"status": "error", "templates": []}
 
 @app.get("/api/history")
-def get_history(user_id: str = Depends(get_current_user)):
+def get_history(user_id: str = Depends(get_current_user), credentials: HTTPAuthorizationCredentials = Depends(security)):
     from modules.database import _make_supabase_request
     try:
-        response = _make_supabase_request(f"meme_history?select=*&order=timestamp.desc&user_id=eq.{user_id}&limit=50", "GET")
+        response = _make_supabase_request(f"meme_history?select=*&order=timestamp.desc&user_id=eq.{user_id}&limit=50", "GET", access_token=credentials.credentials)
         if response is not None:
              return {"history": response}
     except Exception as e:
@@ -64,7 +66,11 @@ class GenerateRequest(BaseModel):
     refine_feedback: Optional[str] = None
 
 @app.post("/generate")
-def generate_endpoint(request: GenerateRequest, user_id: str = Depends(get_current_user)) -> dict:
+def generate_endpoint(
+    request: GenerateRequest, 
+    user_id: str = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> dict:
     """
     Core API pipeline endpoint.
     Recieves user ideation, processes semantic routing, generates multimodal text instructions,
@@ -82,15 +88,21 @@ def generate_endpoint(request: GenerateRequest, user_id: str = Depends(get_curre
         output_image_paths = []
         payloads = []
         
-        # Step 3 & 4: Deep loop across all matching templates!
-        for i, tmpl in enumerate(target_templates):
+        # Step 3 & 4: Execute batched compilation for all matching templates!
+        try:
+            batched_payloads = generate_batched_captions(
+                user_idea=request.user_idea,
+                template_names=target_templates,
+                refine_feedback=request.refine_feedback
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Generation failed: {e}")
+            
+        for i, caption_payload in enumerate(batched_payloads):
+             tmpl = caption_payload.get("selected_template")
+             if not tmpl:
+                 continue
              try:
-                 caption_payload = generate_meme_caption(
-                     user_idea=request.user_idea,
-                     template_name=tmpl,
-                     refine_feedback=request.refine_feedback
-                 )
-                 
                  # Assembly maps visual JPEGs dynamically into a memory stream array
                  elements = caption_payload.get("text_elements", [])
                  img_bytes, filename = assemble_meme(tmpl, elements, variant_index=i)
@@ -105,7 +117,8 @@ def generate_endpoint(request: GenerateRequest, user_id: str = Depends(get_curre
                          ai_payload=caption_payload,
                          image_url=cloud_url,
                          template_name=tmpl,
-                         user_id=user_id
+                         user_id=user_id,
+                         access_token=credentials.credentials
                      )
                      
                      output_image_paths.append(cloud_url)
@@ -113,12 +126,68 @@ def generate_endpoint(request: GenerateRequest, user_id: str = Depends(get_curre
                  else:
                      print(f"Skipped {tmpl} due to cloud storage upload fault.")
              except Exception as load_err:
-                 print(f"Skipped template {tmpl} due to error: {load_err}")
+                 print(f"Skipped template {tmpl} assembly due to error: {load_err}")
         
         return {
             "status": "success",
             "output_image_paths": output_image_paths,
             "ai_payload": payloads
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/generate/custom")
+async def generate_custom_endpoint(
+    user_idea: str = Form(...),
+    refine_feedback: Optional[str] = Form(None),
+    template_image: UploadFile = File(...),
+    user_id: str = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> dict:
+    """
+    Endpoint for custom user-uploaded templates.
+    """
+    try:
+        moderate_input(user_idea)
+        
+        os.makedirs("temps", exist_ok=True)
+        import shutil
+        import uuid
+        
+        custom_uuid = uuid.uuid4().hex[:8]
+        temp_path = os.path.join("temps", f"custom_{custom_uuid}_{template_image.filename}")
+        with open(temp_path, "wb") as buffer:
+            shutil.copyfileobj(template_image.file, buffer)
+            
+        # Single Multimodal Pass for context + text + layout
+        caption_payload = generate_custom_caption(user_idea, temp_path, refine_feedback)
+        
+        elements = caption_payload.get("text_elements", [])
+        img_bytes, filename = assemble_meme("custom_upload", elements, variant_index=0, custom_image_path=temp_path)
+        
+        cloud_url = upload_to_storage(img_bytes, filename)
+        
+        if cloud_url:
+             log_meme_history(
+                 user_prompt=user_idea + (f" (Custom Template)"),
+                 ai_payload=caption_payload,
+                 image_url=cloud_url,
+                 template_name="custom_upload",
+                 user_id=user_id,
+                 access_token=credentials.credentials
+             )
+             
+        # Cleanup
+        try:
+             os.remove(temp_path)
+        except Exception:
+             pass
+             
+        return {
+            "status": "success",
+            "output_image_paths": [cloud_url] if cloud_url else [],
+            "ai_payload": [caption_payload]
         }
         
     except Exception as e:

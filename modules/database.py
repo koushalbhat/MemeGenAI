@@ -3,7 +3,7 @@ import json
 import urllib.request
 import urllib.error
 
-def _make_supabase_request(endpoint: str, method: str, data: dict = None):
+def _make_supabase_request(endpoint: str, method: str, data: dict = None, access_token: str = None):
     url = os.environ.get("SUPABASE_URL", "").rstrip("/")
     key = os.environ.get("SUPABASE_KEY")
     
@@ -14,7 +14,7 @@ def _make_supabase_request(endpoint: str, method: str, data: dict = None):
     full_url = f"{url}/rest/v1/{endpoint}"
     headers = {
         "apikey": key,
-        "Authorization": f"Bearer {key}",
+        "Authorization": f"Bearer {access_token if access_token else key}",
         "Content-Type": "application/json",
         "Prefer": "return=representation"
     }
@@ -34,7 +34,7 @@ def _make_supabase_request(endpoint: str, method: str, data: dict = None):
         print(f"[Supabase Database Error] URL Error: {e.reason}")
         return None
 
-def log_meme_history(user_prompt: str, ai_payload: dict, image_url: str, template_name: str, user_id: str) -> None:
+def log_meme_history(user_prompt: str, ai_payload: dict, image_url: str, template_name: str, user_id: str, access_token: str = None) -> None:
     """Saves a successfully generated meme to the meme_history table."""
     _make_supabase_request(
         endpoint="meme_history",
@@ -45,7 +45,8 @@ def log_meme_history(user_prompt: str, ai_payload: dict, image_url: str, templat
             "image_url": image_url,
             "template_name": template_name,
             "user_id": user_id
-        }
+        },
+        access_token=access_token
     )
 
 def upload_to_storage(image_bytes: bytes, filename: str) -> str:

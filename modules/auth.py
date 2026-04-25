@@ -1,30 +1,39 @@
 import os
-import jwt
+import json
+import urllib.request
+import urllib.error
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 
 load_dotenv()
-
 security = HTTPBearer()
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
-    """Verifies the Supabase JWT token and extracts the user ID."""
+    """Verifies the Supabase JWT token by pinging the native Supabase Edge API."""
     token = credentials.credentials
-    secret = os.environ.get("SUPABASE_JWT_SECRET")
+    url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    key = os.environ.get("SUPABASE_KEY")
     
-    if not secret:
-        raise HTTPException(status_code=500, detail="SUPABASE_JWT_SECRET environment variable is missing")
+    if not url or not key:
+        raise HTTPException(status_code=500, detail="Supabase credentials missing.")
         
+    endpoint = f"{url}/auth/v1/user"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "apikey": key,
+        "Content-Type": "application/json"
+    }
+    
+    req = urllib.request.Request(endpoint, headers=headers, method="GET")
     try:
-        # Supabase uses HS256 for signing its JWTs natively.
-        # "aud" claim is usually "authenticated" for logged in users
-        payload = jwt.decode(token, secret, algorithms=["HS256"], audience="authenticated")
-        user_id = payload.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid auth payload, missing sub")
-        return user_id
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.InvalidTokenError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+        with urllib.request.urlopen(req) as response:
+            user_data = json.loads(response.read().decode("utf-8"))
+            user_id = user_data.get("id")
+            if not user_id:
+                raise HTTPException(status_code=401, detail="Valid token, but no user ID mapped.")
+            return user_id
+    except urllib.error.HTTPError:
+        raise HTTPException(status_code=401, detail="Token Invalid: Cryptographic rejection by Supabase Edge.")
+    except urllib.error.URLError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reach Auth Node: {e.reason}")

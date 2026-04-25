@@ -16,3 +16,10 @@ CREATE POLICY "Users can select their own memes"
 ON meme_history FOR SELECT
 TO authenticated
 USING (auth.uid() = user_id);
+
+-- 4) Storage Integrity Access 
+-- Allows the FastAPI anon-key backend to push physical image bytes into the cloud
+CREATE POLICY "Allow programmatic backend uploads" 
+ON storage.objects FOR INSERT 
+TO public 
+WITH CHECK (bucket_id = 'memes');

@@ -69,27 +69,32 @@ def fit_text_in_box(draw, text, box, font_path):
 
 from typing import Tuple
 
-def assemble_meme(template_name: str, elements: list, variant_index: int = 0) -> Tuple[bytes, str]:
+def assemble_meme(template_name: str, elements: list, variant_index: int = 0, custom_image_path: str = None) -> Tuple[bytes, str]:
     """
     Renders exactly one variant of the text elements onto the base image.
+    Supports predefined templates or custom user-uploaded images via `custom_image_path`.
     """
     
-    try:
-        with open("templates.json", "r") as f:
-            templates_db = json.load(f)
-    except Exception as e:
-        raise RuntimeError(f"Could not load templates.json: {e}")
+    if custom_image_path and os.path.exists(custom_image_path):
+        template_path = custom_image_path
+        filename = os.path.basename(custom_image_path)
+    else:
+        try:
+            with open("templates.json", "r") as f:
+                templates_db = json.load(f)
+        except Exception as e:
+            raise RuntimeError(f"Could not load templates.json: {e}")
+            
+        template_info = templates_db.get(template_name)
+        if not template_info:
+            raise ValueError(f"Template '{template_name}' not found in database.")
+            
+        filename = template_info.get("filename", "")
+        template_path = os.path.join("templates", filename)
         
-    template_info = templates_db.get(template_name)
-    if not template_info:
-        raise ValueError(f"Template '{template_name}' not found in database.")
-        
-    filename = template_info.get("filename", "")
-    template_path = os.path.join("templates", filename)
-    
-    if not os.path.exists(template_path):
-        raise FileNotFoundError(f"Template image {template_path} not found.")
-        
+        if not os.path.exists(template_path):
+            raise FileNotFoundError(f"Template image {template_path} not found.")
+            
     # Open image
     img = Image.open(template_path).convert("RGB")
     width, height = img.size

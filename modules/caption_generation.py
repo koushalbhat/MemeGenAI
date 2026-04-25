@@ -146,3 +146,163 @@ Ensure box_coordinates represent the [left, top, right, bottom] bounds of the bl
         return json.loads(raw_text.strip())
     except Exception as e:
         raise ValueError(f"Failed to parse AI payload. Error: {e}\nRaw Model String: {response.text}")
+
+def generate_batched_captions(user_idea: str, template_names: list[str], refine_feedback: str = None) -> list[dict]:
+    """
+    Calls the Gemini API to generate meme text elements for multiple templates in a single shot.
+    """
+    if not template_names:
+        return []
+        
+    try:
+        with open("templates.json", "r") as f:
+            templates_db = json.load(f)
+    except Exception as e:
+        raise RuntimeError(f"Could not load templates.json: {e}")
+        
+    images = []
+    metadata = []
+    
+    for tmpl in template_names:
+        info = templates_db.get(tmpl)
+        if not info:
+             print(f"Template {tmpl} not found in DB.")
+             continue
+        path = os.path.join("templates", info["filename"])
+        if os.path.exists(path):
+             img = Image.open(path)
+             images.append(img)
+             metadata.append({"name": tmpl, "width": img.size[0], "height": img.size[1]})
+             
+    if not images:
+        raise ValueError("No valid templates found for batch generation.")
+
+    prompt = f"""
+You are the core Caption Generation Module for an AI-Driven Multimodal Meme System.
+Your goal is to visually analyze the provided {len(images)} meme template images IN ORDER, transform the user's "Situation/Idea" into a structured, humorous format, and tell us exactly where to draw the text for EACH template.
+
+User Input Idea: "{user_idea}"
+
+Here is the metadata for the images provided in order:
+"""
+    for i, meta in enumerate(metadata):
+         prompt += f"Image {i+1}: Template Name '{meta['name']}', Size: {meta['width']}x{meta['height']}\n"
+         
+    if refine_feedback:
+        prompt += f"\nCRITICAL USER FEEDBACK: The user requested the following refinement to your previous attempt: \"{refine_feedback}\". Please adapt the humor and text strictly.\n"
+
+    prompt += f"""
+Return the response in a clean JSON format representing a LIST of JSON objects matching this schema exactly (one for each template):
+[
+  {{
+    "selected_template": "template_name_here",
+    "reasoning": "Briefly explain why this template matches.",
+    "text_elements": [
+      {{
+        "text": "TEXT_HERE",
+        "box_coordinates": {{"x1": 0, "y1": 0, "x2": 100, "y2": 100}}
+      }}
+    ]
+  }}
+]
+"""
+    gemma_prompt = prompt + "\nIMPORTANT: Return precisely a standard JSON Array only!"
+    
+    payload = [prompt] + images
+    
+    try:
+        response = primary_model.generate_content(
+            payload,
+            generation_config=genai.GenerationConfig(response_mime_type="application/json")
+        )
+    except Exception as e:
+        if "429" in str(e) or "ResourceExhausted" in str(e) or "quota" in str(e).lower():
+            print(f"[Failover Routing] Primary Model Quota Exceeded! Cascading batched payload...")
+            response = fallback_model.generate_content([gemma_prompt] + images)
+        else:
+            raise e
+            
+    try:
+        raw_text = response.text.strip()
+        if raw_text.startswith("```json"):
+             raw_text = raw_text[7:]
+        if raw_text.startswith("```"):
+             raw_text = raw_text[3:]
+        if raw_text.endswith("```"):
+             raw_text = raw_text[:-3]
+             
+        data = json.loads(raw_text.strip())
+        if not isinstance(data, list):
+             data = [data] # Fallback if it returned a single dict
+        return data
+    except Exception as e:
+        raise ValueError(f"Failed to parse batched AI payload. Error: {e}")
+
+def generate_custom_caption(user_idea: str, image_path: str, refine_feedback: str = None) -> dict:
+    """
+    Calls the Gemini API to analyze a custom, unknown image template.
+    Extracts visual context, generates humor, and determines bounding boxes in one multimodal shot.
+    """
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"Custom template image {image_path} not found.")
+        
+    img = Image.open(image_path)
+    width, height = img.size
+
+    prompt = f"""
+You are the core Caption Generation and Visual Reasoning Module for an AI-Driven Multimodal Meme System.
+A user has uploaded a CUSTOM, previously unseen image template.
+The image has a size of {width}x{height} pixels.
+
+Task:
+1. Examine the image content. Understand the scene, characters, or context. Extract simple visual features to help with contextual matching.
+2. Identify the blank areas (like white boxes, empty space, or standard text zones) meant for text placement.
+3. Formulate punchy, dry, context-aware internet humor matching the user's situation.
+4. For each text part, specify the absolute pixel bounding box [x1, y1, x2, y2] where that text should be drawn.
+
+User Input Idea: "{user_idea}"
+"""
+    if refine_feedback:
+        prompt += f"\nCRITICAL USER FEEDBACK: The user requested the following refinement to your previous attempt: \"{refine_feedback}\". Please adapt the humor and text strictly.\n"
+
+    prompt += f"""
+Return the response in a clean JSON format matching this schema:
+{{
+  "selected_template": "custom_upload",
+  "reasoning": "Explain the visual features extracted and why this text fits the image.",
+  "text_elements": [
+    {{
+      "text": "TEXT_HERE",
+      "box_coordinates": {{"x1": 0, "y1": 0, "x2": 100, "y2": 100}}
+    }}
+  ]
+}}
+
+Ensure box_coordinates represent the [left, top, right, bottom] bounds of the blank drawing regions. Keep the text concise and funny.
+"""
+    gemma_prompt = prompt + "\nIMPORTANT: Return precisely a standard JSON Object only!"
+    
+    try:
+        response = primary_model.generate_content(
+            [prompt, img],
+            generation_config=genai.GenerationConfig(response_mime_type="application/json")
+        )
+    except Exception as e:
+         if "429" in str(e) or "ResourceExhausted" in str(e) or "quota" in str(e).lower():
+            print(f"[Failover Routing] Primary Model Quota Exceeded! Cascading custom image payload...")
+            response = fallback_model.generate_content([gemma_prompt, img])
+         else:
+            raise e
+            
+    try:
+        raw_text = response.text.strip()
+        if raw_text.startswith("```json"):
+             raw_text = raw_text[7:]
+        if raw_text.startswith("```"):
+             raw_text = raw_text[3:]
+        if raw_text.endswith("```"):
+             raw_text = raw_text[:-3]
+             
+        return json.loads(raw_text.strip())
+    except Exception as e:
+        raise ValueError(f"Failed to parse custom AI payload. Error: {e}")
