@@ -3,6 +3,25 @@ import json
 import textwrap
 from PIL import Image, ImageDraw, ImageFont
 
+def wrap_text_to_pixels(draw, text, font, max_width):
+    lines = []
+    for paragraph in text.split('\n'):
+        words = paragraph.split()
+        if not words:
+            lines.append('')
+            continue
+        current_line = words[0]
+        for word in words[1:]:
+            bbox = draw.textbbox((0, 0), current_line + " " + word, font=font)
+            w = bbox[2] - bbox[0]
+            if w <= max_width:
+                current_line += " " + word
+            else:
+                lines.append(current_line)
+                current_line = word
+        lines.append(current_line)
+    return "\n".join(lines)
+
 def fit_text_in_box(draw, text, box, font_path, color="white", custom_stroke_width=None, font_size_override=None):
     x1, y1, x2, y2 = box.get("x1", 0), box.get("y1", 0), box.get("x2", 100), box.get("y2", 100)
     
@@ -37,9 +56,8 @@ def fit_text_in_box(draw, text, box, font_path, color="white", custom_stroke_wid
         if "\n" in text:
             wrapped_text = text # Respect manual line breaks added via Editor
         else:
-            # Calculate chars per line using standard 0.5 font aspect ratio
-            chars_per_line = max(1, int((box_w * 2.0) / font_size))
-            wrapped_text = "\n".join(textwrap.wrap(text, width=chars_per_line, break_long_words=False))
+            # Wrap based on exact pixel bounds just like browser CSS
+            wrapped_text = wrap_text_to_pixels(draw, text, font, box_w)
         
         bbox = draw.multiline_textbbox((0, 0), wrapped_text, font=font)
         text_w = bbox[2] - bbox[0]
