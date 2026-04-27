@@ -33,6 +33,9 @@ export default function RootLayout({
         <main className="flex-grow">
           {children}
         </main>
+        <footer className="w-full text-center py-6 text-sm text-gray-500 border-t border-white/5 mt-auto">
+          &copy; 2026 MemeGenAI | All Rights Reserved
+        </footer>
       </body>
     </html>
   );
