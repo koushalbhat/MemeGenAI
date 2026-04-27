@@ -17,7 +17,7 @@ export default function Gallery() {
 
   const fetchTemplates = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/templates");
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/templates`);
       if (res.ok) {
          const data = await res.json();
          setTemplates(data.templates || {});
@@ -28,7 +28,7 @@ export default function Gallery() {
   const fetchHistory = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch("http://127.0.0.1:8000/api/history", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/history`, {
          headers: {
             "Authorization": `Bearer ${session?.access_token || ""}`
          }
@@ -84,7 +84,8 @@ export default function Gallery() {
                        let baseImgUrl = null;
                        if (item.template_name && templates[item.template_name]) {
                            const filename = templates[item.template_name].filename;
-                           baseImgUrl = `https://vpsczwvwssghqrmhgnqq.supabase.co/storage/v1/object/public/template-assets/${encodeURIComponent(filename)}`;
+                           const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://xixljvaizawnsquricma.supabase.co";
+                           baseImgUrl = `${supabaseUrl}/storage/v1/object/public/template-assets/${encodeURIComponent(filename)}`;
                        } else if (item.ai_caption && item.ai_caption.base_image_url) {
                            baseImgUrl = item.ai_caption.base_image_url;
                        }

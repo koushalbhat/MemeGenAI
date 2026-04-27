@@ -26,7 +26,7 @@ export default function Home() {
           if (feedbackStr) formData.append("refine_feedback", feedbackStr);
           formData.append("template_image", customImage);
           
-          res = await fetch("http://127.0.0.1:8000/generate/custom", {
+          res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/generate/custom`, {
             method: "POST",
             headers: { 
               "Authorization": `Bearer ${session?.access_token || ""}`
@@ -34,7 +34,7 @@ export default function Home() {
             body: formData,
           });
       } else {
-          res = await fetch("http://127.0.0.1:8000/generate", {
+          res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/generate`, {
             method: "POST",
             headers: { 
               "Content-Type": "application/json",
