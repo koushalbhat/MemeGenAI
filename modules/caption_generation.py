@@ -90,7 +90,7 @@ Your goal is to visually analyze the provided meme template image, transform the
 The provided image has a size of {width}x{height} pixels.
 
 Task:
-1. Examine the image layout. CRITICAL VISUAL RULE: Identify the EXACT boundaries of the intended text areas in the scene. This could be an in-universe physical object (a note, screen, billboard), a drawn element (a speech bubble), or a dedicated layout space (a white border, empty sky, or blank panel). Your bounding box MUST tightly fit perfectly INSIDE these specific intended areas. NEVER lazily default to placing text at the top or bottom edges of the entire image if specific text zones exist!
+1. Examine the image layout. CRITICAL VISUAL RULE: Identify the EXACT boundaries of the intended text areas in the scene. This could be an in-universe physical object (a note, screen, billboard), a drawn element (a speech bubble), or a dedicated layout space (a white border, empty sky, or blank panel). Your bounding box MUST tightly fit perfectly INSIDE these specific intended areas. NEVER lazily default to placing text at the top or bottom edges of the entire image if specific text zones exist! Furthermore, if the image already contains pre-existing burned-in text (like a joke setup), DO NOT generate text elements for those areas. ONLY generate NEW text for the intentionally blank spaces.
 2. Formulate punchy, dry, context-aware internet humor matching the user's situation.
 3. For each text part, specify the bounding box [x1, y1, x2, y2] using NORMALIZED COORDINATES between 0 and 1000 (where 0 is the top/left edge, and 1000 is the bottom/right edge). This allows for perfect spatial scaling.
 
@@ -193,7 +193,7 @@ def generate_batched_captions(user_idea: str, template_names: list[str], refine_
 You are the core Caption Generation Module for an AI-Driven Multimodal Meme System.
 Your goal is to visually analyze the provided {len(images)} meme template images IN ORDER, transform the user's "Situation/Idea" into a structured, humorous format, and tell us exactly where to draw the text for EACH template.
 
-CRITICAL VISUAL RULE: For each image, heavily scrutinize the layout. Identify the EXACT boundaries of the intended text areas (e.g., in-universe objects like notes/screens, speech bubbles, white borders, or blank panels). Your `box_coordinates` MUST perfectly and tightly map to the inside of those specific zones! Do not lazily default to placing text at the very top or bottom of the entire image if a specific text zone exists.
+CRITICAL VISUAL RULE: For each image, heavily scrutinize the layout. Identify the EXACT boundaries of the intended text areas (e.g., in-universe objects like notes/screens, speech bubbles, white borders, or blank panels). Your `box_coordinates` MUST perfectly and tightly map to the inside of those specific zones! Do not lazily default to placing text at the very top or bottom of the entire image if a specific text zone exists. Furthermore, if the image already contains pre-existing burned-in text, DO NOT generate text elements for those areas. ONLY generate NEW text for the intentionally blank spaces.
 
 User Input Idea: "{user_idea}"
 
@@ -270,7 +270,7 @@ The image has a size of {width}x{height} pixels.
 
 Task:
 1. Examine the image content. Understand the scene, characters, or context. Extract simple visual features to help with contextual matching.
-2. Identify the blank areas meant for text placement. CRITICAL VISUAL RULE: Identify the EXACT boundaries of the intended text areas (e.g., in-universe objects, speech bubbles, white borders, or blank panels). Your bounding box MUST tightly fit perfectly INSIDE these specific areas. Do not lazily default to placing text at the top/bottom edges of the screen if specific text zones exist.
+2. Identify the blank areas meant for text placement. CRITICAL VISUAL RULE: Identify the EXACT boundaries of the intended text areas (e.g., in-universe objects, speech bubbles, white borders, or blank panels). Your bounding box MUST tightly fit perfectly INSIDE these specific areas. Do not lazily default to placing text at the top/bottom edges of the screen if specific text zones exist. Furthermore, if the image already contains pre-existing burned-in text, DO NOT generate text elements for those areas. ONLY generate NEW text for the intentionally blank spaces.
 3. Formulate punchy, dry, context-aware internet humor matching the user's situation.
 4. For each text part, specify the bounding box [x1, y1, x2, y2] using NORMALIZED COORDINATES between 0 and 1000 (0 = top/left, 1000 = bottom/right). Use your native spatial reasoning to perfectly trace the object.
 

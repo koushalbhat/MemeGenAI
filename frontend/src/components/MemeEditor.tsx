@@ -206,11 +206,12 @@ export default function MemeEditor({
                   <p 
                     style={{ 
                       color: el.color, 
-                      fontSize: 'min(15cqw, 30cqh)',
+                      fontSize: 'clamp(12px, 15cqmin, 60px)',
                       textShadow: el.color === 'white' ? '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000' : 'none',
                       fontFamily: 'Impact, sans-serif',
                       lineHeight: '1.1',
-                      wordWrap: 'break-word'
+                      wordWrap: 'break-word',
+                      whiteSpace: 'pre-wrap'
                     }}
                     className="pointer-events-none"
                   >
@@ -245,6 +246,9 @@ export default function MemeEditor({
                   className="w-full bg-slate-950/50 text-white rounded p-3 border border-slate-600 focus:border-blue-500 focus:outline-none resize-none"
                   rows={3}
                 />
+                <p className="text-xs text-blue-400 mt-1">
+                  Tip: Hit 'Enter' to force manual line breaks! The backend compiles the final image precisely to the box boundaries.
+                </p>
               </div>
 
               <div>
