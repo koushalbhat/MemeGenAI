@@ -28,6 +28,37 @@ export default function MemeEditor({
   const containerRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
+  // Auto-fit text algorithm to mirror Python Backend
+  useEffect(() => {
+    elements.forEach(el => {
+      const container = document.getElementById(`editor-el-${el.id}`);
+      const textNode = document.getElementById(`text-p-${el.id}`);
+      if (container && textNode) {
+        // Temporarily allow text node to expand freely for measurement
+        textNode.style.maxHeight = 'none';
+        
+        let minSize = 6;
+        let maxSize = Math.max(10, Math.min(container.clientWidth, container.clientHeight));
+        let bestSize = minSize;
+        
+        while (minSize <= maxSize) {
+          let mid = Math.floor((minSize + maxSize) / 2);
+          textNode.style.fontSize = `${mid}px`;
+          
+          if (textNode.scrollHeight <= container.clientHeight && textNode.scrollWidth <= container.clientWidth) {
+            bestSize = mid;
+            minSize = mid + 1;
+          } else {
+            maxSize = mid - 1;
+          }
+        }
+        textNode.style.fontSize = `${bestSize}px`;
+        textNode.style.maxHeight = '100%';
+      }
+    });
+  });
+
+
   const handlePointerDown = (e: any, id: number) => {
     e.stopPropagation();
     setSelectedId(id);
@@ -204,14 +235,16 @@ export default function MemeEditor({
                   className={`absolute flex items-center justify-center text-center cursor-move border-2 overflow-hidden ${isSelected ? 'border-blue-500 bg-blue-500/10 z-10' : 'border-dashed border-white/30 hover:border-white/60'} transition-colors`}
                 >
                   <p 
+                    id={`text-p-${el.id}`}
                     style={{ 
                       color: el.color, 
-                      fontSize: 'clamp(12px, 15cqmin, 60px)',
+                      fontSize: '20px', // Fallback, will be overridden by useEffect
                       textShadow: el.color === 'white' ? '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000' : 'none',
                       fontFamily: 'Impact, sans-serif',
                       lineHeight: '1.1',
                       wordWrap: 'break-word',
-                      whiteSpace: 'pre-wrap'
+                      whiteSpace: 'pre-wrap',
+                      maxWidth: '100%'
                     }}
                     className="pointer-events-none"
                   >
