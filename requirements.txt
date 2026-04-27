@@ -4,5 +4,5 @@ pydantic
 google-generativeai
 pillow
 python-dotenv
-numpy
 pyjwt
+python-multipart
