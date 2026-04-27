@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { createClient } from '../../../utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { Mail, Lock, LogIn, UserPlus } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Mail, Lock, LogIn, UserPlus, User, Calendar } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -12,6 +12,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'login' | 'signup'>('login');
+  
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   
   const router = useRouter();
   const supabase = createClient();
@@ -23,7 +27,18 @@ export default function LoginPage() {
 
     const { error } = mode === 'login' 
       ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${location.origin}/auth/callback` }});
+      : await supabase.auth.signUp({ 
+          email, 
+          password, 
+          options: { 
+            emailRedirectTo: `${location.origin}/auth/callback`,
+            data: {
+              first_name: firstName,
+              last_name: lastName,
+              dob: dateOfBirth
+            }
+          }
+        });
 
     if (error) {
       setError(error.message);
@@ -69,6 +84,58 @@ export default function LoginPage() {
 
           <form onSubmit={handleAuth} className="space-y-6">
             <div className="space-y-4">
+              <AnimatePresence>
+                {mode === 'signup' && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="space-y-4 overflow-hidden"
+                  >
+                    <div className="flex gap-4">
+                      <div className="relative flex-1">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <User className="h-5 w-5 text-fuchsia-400" />
+                        </div>
+                        <input
+                          type="text"
+                          value={firstName}
+                          onChange={(e) => setFirstName(e.target.value)}
+                          placeholder="First Name"
+                          required
+                          className="w-full pl-11 pr-4 py-4 bg-black/40 border border-white/5 rounded-2xl focus:ring-2 focus:ring-fuchsia-500 focus:border-transparent text-white placeholder-gray-500 transition-all font-mono"
+                        />
+                      </div>
+                      <div className="relative flex-1">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <User className="h-5 w-5 text-cyan-400" />
+                        </div>
+                        <input
+                          type="text"
+                          value={lastName}
+                          onChange={(e) => setLastName(e.target.value)}
+                          placeholder="Last Name"
+                          required
+                          className="w-full pl-11 pr-4 py-4 bg-black/40 border border-white/5 rounded-2xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-white placeholder-gray-500 transition-all font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <Calendar className="h-5 w-5 text-fuchsia-400" />
+                      </div>
+                      <input
+                        type="date"
+                        value={dateOfBirth}
+                        onChange={(e) => setDateOfBirth(e.target.value)}
+                        required
+                        className="w-full pl-11 pr-4 py-4 bg-black/40 border border-white/5 rounded-2xl focus:ring-2 focus:ring-fuchsia-500 focus:border-transparent text-white placeholder-gray-500 transition-all font-mono [color-scheme:dark]"
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <Mail className="h-5 w-5 text-fuchsia-400" />

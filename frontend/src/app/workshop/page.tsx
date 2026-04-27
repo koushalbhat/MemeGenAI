@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { createClient } from '../../utils/supabase/client';
+import MemeEditor from '../../components/MemeEditor';
 
 export default function Home() {
   const [idea, setIdea] = useState("");
@@ -8,6 +9,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [refineFeedback, setRefineFeedback] = useState("");
   const supabase = createClient();
+  const [activeEditor, setActiveEditor] = useState<{index: number, baseImageUrl: string, historyId: string, elements: any[]} | null>(null);
 
   const [customImage, setCustomImage] = useState<File | null>(null);
 
@@ -132,11 +134,46 @@ export default function Home() {
                    >
                      Contextual Refine
                    </button>
+                   {results.base_image_urls && results.base_image_urls[idx] && results.history_ids && results.history_ids[idx] && (
+                       <button
+                         onClick={() => setActiveEditor({
+                             index: idx,
+                             baseImageUrl: results.base_image_urls[idx],
+                             historyId: results.history_ids[idx],
+                             elements: results.ai_payload[idx]?.text_elements || []
+                         })}
+                         className="mt-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:from-blue-400 hover:to-indigo-500 transition"
+                       >
+                         Open Interactive Editor
+                       </button>
+                   )}
                 </div>
               </div>
             ))}
           </div>
         </div>
+      )}
+
+      {activeEditor && (
+          <MemeEditor
+             baseImageUrl={activeEditor.baseImageUrl}
+             historyId={activeEditor.historyId}
+             initialElements={activeEditor.elements}
+             onClose={() => setActiveEditor(null)}
+             onSave={(newUrl, newElements) => {
+                 setResults((prev: any) => {
+                     const newPaths = [...prev.output_image_paths];
+                     newPaths[activeEditor.index] = newUrl;
+                     
+                     const newPayloads = [...prev.ai_payload];
+                     if (!newPayloads[activeEditor.index]) newPayloads[activeEditor.index] = {};
+                     newPayloads[activeEditor.index].text_elements = newElements;
+                     
+                     return { ...prev, output_image_paths: newPaths, ai_payload: newPayloads };
+                 });
+                 setActiveEditor(null);
+             }}
+          />
       )}
     </div>
   );

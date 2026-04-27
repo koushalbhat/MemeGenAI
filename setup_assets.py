@@ -35,5 +35,22 @@ def setup_assets():
         print("Template image created.")
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
+    load_dotenv()
+    import modules.database as db
+    
     setup_assets()
+    print("Syncing templates to Supabase Cloud Storage (template-assets bucket)...")
+    if os.path.exists("templates"):
+         for root, _, files in os.walk("templates"):
+             for file in files:
+                  if file.lower().endswith((".jpg", ".png", ".jpeg")):
+                       path = os.path.join(root, file)
+                       try:
+                           with open(path, "rb") as f:
+                               public_url = db.upload_template_asset(f.read(), file)
+                           if public_url:
+                               print(f"Uploaded {file} -> {public_url}")
+                       except Exception as e:
+                           print(f"Failed to sync {file}: {e}")
     print("Done!")

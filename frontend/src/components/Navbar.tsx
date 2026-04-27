@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "../utils/supabase/server";
+import ProfileDropdown from "./ProfileDropdown";
 
 export default async function Navbar() {
   const supabase = await createClient();
@@ -27,11 +28,7 @@ export default async function Navbar() {
                 <Link href="/workshop" className="text-sm font-medium text-gray-300 hover:text-fuchsia-400 transition font-mono">
                   Workshop
                 </Link>
-                <form action="/auth/signout" method="post" className="m-0 p-0">
-                  <button type="submit" className="text-sm font-medium px-4 py-2 bg-white/5 hover:bg-white/10 hover:text-white text-gray-300 transition-all font-mono rounded-xl border border-white/10">
-                    Sign Out
-                  </button>
-                </form>
+                <ProfileDropdown user={user} />
               </>
             ) : (
                <Link href="/login" className="text-sm font-medium px-5 py-2 bg-fuchsia-600/20 text-fuchsia-400 hover:bg-fuchsia-600/30 hover:text-fuchsia-300 transition-all font-mono rounded-xl border border-fuchsia-500/30">

@@ -42,10 +42,10 @@ def serve_frontend():
 
 @app.get("/api/templates")
 def get_templates():
+    from modules.database import get_all_templates
     try:
-        with open("templates.json", "r") as f:
-            templates_db = json.load(f)
-        return {"status": "success", "templates": list(templates_db.keys())}
+        templates_db = get_all_templates()
+        return {"status": "success", "templates": templates_db}
     except Exception as e:
         return {"status": "error", "templates": []}
 
@@ -87,6 +87,13 @@ def generate_endpoint(
         
         output_image_paths = []
         payloads = []
+        base_image_urls = []
+        history_ids = []
+        
+        # Load db for base urls
+        from modules.database import get_all_templates
+        templates_db = get_all_templates()
+        cloud_url_base = os.environ.get("SUPABASE_URL", "").rstrip("/")
         
         # Step 3 & 4: Execute batched compilation for all matching templates!
         try:
@@ -109,10 +116,9 @@ def generate_endpoint(
                  
                  # Push natively to Supabase Cloud Storage Bucket
                  cloud_url = upload_to_storage(img_bytes, filename)
-                 
                  if cloud_url:
                      # Log public URL directly into Postgres
-                     log_meme_history(
+                     history_id = log_meme_history(
                          user_prompt=request.user_idea + (f" (Refinement: {request.refine_feedback})" if request.refine_feedback else ""),
                          ai_payload=caption_payload,
                          image_url=cloud_url,
@@ -121,8 +127,14 @@ def generate_endpoint(
                          access_token=credentials.credentials
                      )
                      
+                     import urllib.parse
+                     filename_base = templates_db.get(tmpl, {}).get("filename", "")
+                     base_url = f"{cloud_url_base}/storage/v1/object/public/template-assets/{urllib.parse.quote(filename_base)}"
+                     
                      output_image_paths.append(cloud_url)
                      payloads.append(caption_payload)
+                     base_image_urls.append(base_url)
+                     history_ids.append(history_id)
                  else:
                      print(f"Skipped {tmpl} due to cloud storage upload fault.")
              except Exception as load_err:
@@ -131,7 +143,9 @@ def generate_endpoint(
         return {
             "status": "success",
             "output_image_paths": output_image_paths,
-            "ai_payload": payloads
+            "ai_payload": payloads,
+            "base_image_urls": base_image_urls,
+            "history_ids": history_ids
         }
         
     except Exception as e:
@@ -156,9 +170,15 @@ async def generate_custom_endpoint(
         import uuid
         
         custom_uuid = uuid.uuid4().hex[:8]
-        temp_path = os.path.join("temps", f"custom_{custom_uuid}_{template_image.filename}")
+        custom_filename = f"custom_{custom_uuid}_{template_image.filename}"
+        temp_path = os.path.join("temps", custom_filename)
         with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(template_image.file, buffer)
+            
+        # Upload the blank custom image so the Editor can use it later
+        from modules.database import upload_template_asset
+        with open(temp_path, "rb") as f:
+            base_image_url = upload_template_asset(f.read(), custom_filename)
             
         # Single Multimodal Pass for context + text + layout
         caption_payload = generate_custom_caption(user_idea, temp_path, refine_feedback)
@@ -168,12 +188,14 @@ async def generate_custom_endpoint(
         
         cloud_url = upload_to_storage(img_bytes, filename)
         
+        history_id = ""
         if cloud_url:
-             log_meme_history(
+             caption_payload["base_image_url"] = base_image_url
+             history_id = log_meme_history(
                  user_prompt=user_idea + (f" (Custom Template)"),
                  ai_payload=caption_payload,
                  image_url=cloud_url,
-                 template_name="custom_upload",
+                 template_name=None,
                  user_id=user_id,
                  access_token=credentials.credentials
              )
@@ -187,8 +209,66 @@ async def generate_custom_endpoint(
         return {
             "status": "success",
             "output_image_paths": [cloud_url] if cloud_url else [],
-            "ai_payload": [caption_payload]
+            "ai_payload": [caption_payload],
+            "base_image_urls": [base_image_url] if base_image_url else [],
+            "history_ids": [history_id] if history_id else []
         }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class EditRequest(BaseModel):
+    history_id: str
+    base_image_url: str
+    text_elements: list
+
+@app.post("/api/edit")
+def edit_meme_endpoint(
+    request: EditRequest,
+    user_id: str = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> dict:
+    """Re-compiles a meme based on exact frontend Editor coordinates and styles."""
+    from modules.database import update_meme_history, _make_supabase_request
+    import urllib.request
+    try:
+        # Securely verify ownership because Supabase is missing an UPDATE policy
+        ownership_check = _make_supabase_request(f"meme_history?id=eq.{request.history_id}&select=user_id,ai_caption", "GET", access_token=credentials.credentials)
+        if not ownership_check or ownership_check[0].get("user_id") != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to edit this meme.")
+            
+        old_payload = ownership_check[0].get("ai_caption", {})
+        
+        # Download the base image temporarily
+        os.makedirs("temps", exist_ok=True)
+        import uuid
+        temp_path = os.path.join("temps", f"edit_{uuid.uuid4().hex[:8]}.jpg")
+        urllib.request.urlretrieve(request.base_image_url, temp_path)
+        
+        # Assemble using the new custom parameters
+        img_bytes, filename = assemble_meme("custom_upload", request.text_elements, variant_index=0, custom_image_path=temp_path)
+        
+        # Upload
+        cloud_url = upload_to_storage(img_bytes, filename)
+        
+        if cloud_url:
+            new_payload = {"text_elements": request.text_elements}
+            if "base_image_url" in old_payload:
+                new_payload["base_image_url"] = old_payload["base_image_url"]
+                
+            update_meme_history(
+                history_id=request.history_id, 
+                new_image_url=cloud_url, 
+                new_payload=new_payload,
+                access_token=None # Use Service Role key to bypass missing UPDATE policy
+            )
+            
+        try:
+            os.remove(temp_path)
+        except:
+            pass
+            
+        return {"status": "success", "image_url": cloud_url}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

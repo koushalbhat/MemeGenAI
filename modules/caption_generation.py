@@ -90,9 +90,9 @@ Your goal is to visually analyze the provided meme template image, transform the
 The provided image has a size of {width}x{height} pixels.
 
 Task:
-1. Examine the image layout. Find the blank areas (like white boxes or standard text zones) meant for text.
+1. Examine the image layout. CRITICAL VISUAL RULE: Identify the EXACT boundaries of the intended text areas in the scene. This could be an in-universe physical object (a note, screen, billboard), a drawn element (a speech bubble), or a dedicated layout space (a white border, empty sky, or blank panel). Your bounding box MUST tightly fit perfectly INSIDE these specific intended areas. NEVER lazily default to placing text at the top or bottom edges of the entire image if specific text zones exist!
 2. Formulate punchy, dry, context-aware internet humor matching the user's situation.
-3. For each text part, specify the absolute pixel bounding box [x1, y1, x2, y2] where that text should be drawn.
+3. For each text part, specify the bounding box [x1, y1, x2, y2] using NORMALIZED COORDINATES between 0 and 1000 (where 0 is the top/left edge, and 1000 is the bottom/right edge). This allows for perfect spatial scaling.
 
 User Input Idea: "{user_idea}"
 Selected Template: "{template_name}"
@@ -154,25 +154,37 @@ def generate_batched_captions(user_idea: str, template_names: list[str], refine_
     if not template_names:
         return []
         
-    try:
-        with open("templates.json", "r") as f:
-            templates_db = json.load(f)
-    except Exception as e:
-        raise RuntimeError(f"Could not load templates.json: {e}")
+    from modules.database import get_all_templates
+    templates_db = get_all_templates()
         
     images = []
     metadata = []
+    
+    url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    import urllib.request
+    from io import BytesIO
     
     for tmpl in template_names:
         info = templates_db.get(tmpl)
         if not info:
              print(f"Template {tmpl} not found in DB.")
              continue
-        path = os.path.join("templates", info["filename"])
-        if os.path.exists(path):
-             img = Image.open(path)
+        filename = info.get("filename")
+        if not filename:
+             continue
+             
+        import urllib.parse
+        encoded_filename = urllib.parse.quote(filename)
+        public_url = f"{url}/storage/v1/object/public/template-assets/{encoded_filename}"
+        try:
+             req = urllib.request.Request(public_url)
+             with urllib.request.urlopen(req) as response:
+                 img_data = response.read()
+             img = Image.open(BytesIO(img_data)).convert("RGB")
              images.append(img)
              metadata.append({"name": tmpl, "width": img.size[0], "height": img.size[1]})
+        except Exception as e:
+             print(f"Failed to fetch {public_url}: {e}")
              
     if not images:
         raise ValueError("No valid templates found for batch generation.")
@@ -180,6 +192,8 @@ def generate_batched_captions(user_idea: str, template_names: list[str], refine_
     prompt = f"""
 You are the core Caption Generation Module for an AI-Driven Multimodal Meme System.
 Your goal is to visually analyze the provided {len(images)} meme template images IN ORDER, transform the user's "Situation/Idea" into a structured, humorous format, and tell us exactly where to draw the text for EACH template.
+
+CRITICAL VISUAL RULE: For each image, heavily scrutinize the layout. Identify the EXACT boundaries of the intended text areas (e.g., in-universe objects like notes/screens, speech bubbles, white borders, or blank panels). Your `box_coordinates` MUST perfectly and tightly map to the inside of those specific zones! Do not lazily default to placing text at the very top or bottom of the entire image if a specific text zone exists.
 
 User Input Idea: "{user_idea}"
 
@@ -256,9 +270,9 @@ The image has a size of {width}x{height} pixels.
 
 Task:
 1. Examine the image content. Understand the scene, characters, or context. Extract simple visual features to help with contextual matching.
-2. Identify the blank areas (like white boxes, empty space, or standard text zones) meant for text placement.
+2. Identify the blank areas meant for text placement. CRITICAL VISUAL RULE: Identify the EXACT boundaries of the intended text areas (e.g., in-universe objects, speech bubbles, white borders, or blank panels). Your bounding box MUST tightly fit perfectly INSIDE these specific areas. Do not lazily default to placing text at the top/bottom edges of the screen if specific text zones exist.
 3. Formulate punchy, dry, context-aware internet humor matching the user's situation.
-4. For each text part, specify the absolute pixel bounding box [x1, y1, x2, y2] where that text should be drawn.
+4. For each text part, specify the bounding box [x1, y1, x2, y2] using NORMALIZED COORDINATES between 0 and 1000 (0 = top/left, 1000 = bottom/right). Use your native spatial reasoning to perfectly trace the object.
 
 User Input Idea: "{user_idea}"
 """
