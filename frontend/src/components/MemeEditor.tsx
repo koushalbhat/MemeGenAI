@@ -202,18 +202,43 @@ export default function MemeEditor({
               src={baseImageUrl} 
               alt="Base Template" 
               onLoad={(e) => {
-                 const parentWidth = e.currentTarget.parentElement?.parentElement?.clientWidth || 600;
+                 const img = e.currentTarget;
+                 const naturalWidth = img.naturalWidth;
+                 const naturalHeight = img.naturalHeight;
+                 const parentWidth = img.parentElement?.parentElement?.clientWidth || 600;
                  const parentHeight = window.innerHeight * 0.7;
-                 const imgRatio = e.currentTarget.naturalWidth / e.currentTarget.naturalHeight;
+                 const imgRatio = naturalWidth / naturalHeight;
                  const containerRatio = parentWidth / parentHeight;
                  
                  if (imgRatio > containerRatio) {
-                     e.currentTarget.style.width = '100%';
-                     e.currentTarget.style.height = 'auto';
+                     img.style.width = '100%';
+                     img.style.height = 'auto';
                  } else {
-                     e.currentTarget.style.height = '70vh';
-                     e.currentTarget.style.width = 'auto';
+                     img.style.height = '70vh';
+                     img.style.width = 'auto';
                  }
+
+                 // Fix AI hallucinated absolute pixel coordinates by normalizing to 0-1000
+                 setElements(prev => {
+                     let changed = false;
+                     const newElements = prev.map(el => {
+                         const m = Math.max(el.box.x1, el.box.y1, el.box.x2, el.box.y2);
+                         if (m > 1000 && naturalWidth > 0 && naturalHeight > 0) {
+                             changed = true;
+                             return {
+                                 ...el,
+                                 box: {
+                                     x1: Math.min(1000, Math.max(0, (el.box.x1 / naturalWidth) * 1000)),
+                                     y1: Math.min(1000, Math.max(0, (el.box.y1 / naturalHeight) * 1000)),
+                                     x2: Math.min(1000, Math.max(0, (el.box.x2 / naturalWidth) * 1000)),
+                                     y2: Math.min(1000, Math.max(0, (el.box.y2 / naturalHeight) * 1000))
+                                 }
+                             };
+                         }
+                         return el;
+                     });
+                     return changed ? newElements : prev;
+                 });
               }}
               className="max-w-full max-h-[70vh] pointer-events-none shadow-2xl"
             />
