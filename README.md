@@ -104,5 +104,5 @@ Your application will be available at [http://localhost:3000](http://localhost:3
 ---
 
 <div align="center">
-  <p>Built for the 2026 AI Hackathon Submission.</p>
+  <p>© Koushal Bhat. All rights reserved</p>
 </div>
